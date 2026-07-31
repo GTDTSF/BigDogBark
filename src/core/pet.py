@@ -205,8 +205,6 @@ class DesktopPet(QWidget):
         
         # 播放大狗叫声音频，防止重复触发
         if os.path.exists(DOG_MP4):
-            # 防止在非常短的时间内产生极其密集的重复重叠播放
-            # 可以稍微加一个冷却检查，但保留点击触发多次的需求
             player = QMediaPlayer()
             audio_output = QAudioOutput()
             player.setAudioOutput(audio_output)
@@ -214,6 +212,10 @@ class DesktopPet(QWidget):
             player.audio_output_ref = audio_output 
             
             player.setSource(QUrl.fromLocalFile(os.path.abspath(DOG_MP4)))
+            
+            # 恢复根据红温增加播放速度 (每次点击速度提升，最高加速到 3.0 倍)
+            playback_rate = min(3.0, 1.0 + (self.anger_level / 100.0))
+            player.setPlaybackRate(playback_rate)
             
             # 播放结束后清理资源
             player.mediaStatusChanged.connect(lambda status, p=player: self._cleanup_player(p, status))
