@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer, QPointF
 from PySide6.QtGui import QCursor, QAction, QMovie, QTransform, QPixmap, QPainter, QColor
 from PySide6.QtWidgets import QWidget, QLabel, QMenu, QApplication
 
-from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, IDLE_GIF, WALK_GIF, PET_WIDTH, PET_HEIGHT
+from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, FRAMES_DIR, PET_WIDTH, PET_HEIGHT
 
 class DesktopPet(QWidget):
     def __init__(self):
@@ -61,35 +61,41 @@ class DesktopPet(QWidget):
         self.think() # 启动 AI 循环
 
     def load_movies(self):
-        """将 GIF 加载到 QMovie 对象中并设置帧拦截。"""
-        self.movies = {}
+        """将静态帧加载为动画序列。"""
+        self.frames = []
         
-        for state, path in [(PetState.IDLE, IDLE_GIF), (PetState.WALKING, WALK_GIF)]:
-            if os.path.exists(path):
-                movie = QMovie(path)
-                # 不是直接将 movie 设置给 label，而是拦截帧
-                # 以便在向左移动时我们可以手动翻转它们。
-                movie.frameChanged.connect(self.on_frame_changed)
-                self.movies[state] = movie
-            else:
-                self.movies[state] = None
-                print(f"警告: 未在 {path} 找到素材")
-                
+        if os.path.exists(FRAMES_DIR):
+            # 获取所有帧文件并排序
+            frame_files = sorted([f for f in os.listdir(FRAMES_DIR) if f.startswith('frame_') and f.endswith('.png')])
+            for f in frame_files:
+                path = os.path.join(FRAMES_DIR, f)
+                pixmap = QPixmap(path)
+                # 预先缩放以提高性能
+                pixmap = pixmap.scaled(
+                    self.size(), 
+                    Qt.AspectRatioMode.KeepAspectRatio, 
+                    Qt.TransformationMode.SmoothTransformation
+                )
+                self.frames.append(pixmap)
+        else:
+            print(f"警告: 未在 {FRAMES_DIR} 找到素材")
+            
+        self.current_frame_index = 0
+        
+        # 动画帧定时器 (约 30 FPS)
+        self.anim_timer = QTimer(self)
+        self.anim_timer.timeout.connect(self.on_frame_changed)
+        self.anim_timer.start(33)
+        
         self.set_state(PetState.IDLE)
 
-    def on_frame_changed(self, frame_number):
-        """每次活动 QMovie 更改其帧时调用。"""
-        if not self.current_movie:
+    def on_frame_changed(self):
+        """更新当前帧。"""
+        if not self.frames:
             return
             
-        pixmap = self.current_movie.currentPixmap()
-        
-        # 将图像按比例平滑缩放至固定的窗口大小
-        pixmap = pixmap.scaled(
-            self.size(), 
-            Qt.AspectRatioMode.KeepAspectRatio, 
-            Qt.TransformationMode.SmoothTransformation
-        )
+        self.current_frame_index = (self.current_frame_index + 1) % len(self.frames)
+        pixmap = self.frames[self.current_frame_index]
         
         # 如果向左移动，则水平镜像图像
         if self.is_mirrored:
@@ -101,17 +107,8 @@ class DesktopPet(QWidget):
     def set_state(self, new_state):
         self.state = new_state
         
-        # 停止上一个动画
-        if self.current_movie:
-            self.current_movie.stop()
-            
-        self.current_movie = self.movies.get(self.state)
-        
-        # 启动新动画
-        if self.current_movie:
-            self.current_movie.start()
-        else:
-            # 如果没有 GIF 则使用后备方案画个圆
+        if not self.frames:
+            # 如果没有帧序列则使用后备方案画个圆
             pixmap = QPixmap(self.size())
             pixmap.fill(Qt.GlobalColor.transparent)
             painter = QPainter(pixmap)
