@@ -5,6 +5,7 @@ from enum import Enum, auto
 class PetState(Enum):
     IDLE = auto()
     WALKING = auto()
+    BARK = auto()
 
 
 # 路径配置

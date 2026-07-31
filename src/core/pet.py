@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer, QPointF
 from PySide6.QtGui import QCursor, QAction, QMovie, QTransform, QPixmap, QPainter, QColor
 from PySide6.QtWidgets import QWidget, QLabel, QMenu, QApplication
 
-from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, QUIT_IMG, PET_WIDTH, PET_HEIGHT
+from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, QUIT_IMG, BARK_IMG, PET_WIDTH, PET_HEIGHT
 
 class DesktopPet(QWidget):
     def __init__(self):
@@ -36,8 +36,15 @@ class DesktopPet(QWidget):
         # 红温系统相关
         self.anger_level = 0
         self.anger_timer = QTimer(self)
-        self.anger_timer.timeout.connect(self.reset_anger)
+        self.anger_timer.timeout.connect(self.trigger_bark)
         self.anger_timer.setSingleShot(True)
+        
+        # Bark状态计时器
+        self.bark_timer = QTimer(self)
+        self.bark_timer.timeout.connect(self.end_bark)
+        self.bark_timer.setSingleShot(True)
+        self.bark_base_x = 0.0
+        self.bark_base_y = 0.0
 
         # --- 图形 / 动画 ---
         self.label = QLabel(self)
@@ -73,6 +80,7 @@ class DesktopPet(QWidget):
 
     def load_image(self):
         """加载静态图片并缓存镜像。"""
+        # 加载正常状态图片
         if os.path.exists(QUIT_IMG):
             pixmap = QPixmap(QUIT_IMG)
             # 缩放至固定尺寸，保持纵横比
@@ -88,6 +96,21 @@ class DesktopPet(QWidget):
             print(f"警告: 未在 {QUIT_IMG} 找到素材")
             self.pixmap_right = self._create_fallback_pixmap(Qt.GlobalColor.green)
             self.pixmap_left = self._create_fallback_pixmap(Qt.GlobalColor.blue)
+
+        # 加载Bark状态图片
+        if os.path.exists(BARK_IMG):
+            pixmap_bark = QPixmap(BARK_IMG)
+            self.pixmap_bark_right = pixmap_bark.scaled(
+                self.size(), 
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            transform = QTransform().scale(-1, 1)
+            self.pixmap_bark_left = self.pixmap_bark_right.transformed(transform)
+        else:
+            print(f"警告: 未在 {BARK_IMG} 找到素材")
+            self.pixmap_bark_right = self._create_fallback_pixmap(Qt.GlobalColor.red)
+            self.pixmap_bark_left = self._create_fallback_pixmap(Qt.GlobalColor.darkRed)
             
         self._update_tinted_pixmaps()
         self.set_state(PetState.IDLE)
@@ -106,9 +129,13 @@ class DesktopPet(QWidget):
         if self.anger_level == 0:
             self.tinted_right = self.pixmap_right
             self.tinted_left = self.pixmap_left
+            self.tinted_bark_right = self.pixmap_bark_right
+            self.tinted_bark_left = self.pixmap_bark_left
         else:
             self.tinted_right = self._apply_red_tint(self.pixmap_right)
             self.tinted_left = self._apply_red_tint(self.pixmap_left)
+            self.tinted_bark_right = self._apply_red_tint(self.pixmap_bark_right)
+            self.tinted_bark_left = self._apply_red_tint(self.pixmap_bark_left)
         self.update_image()
 
     def _apply_red_tint(self, pixmap):
@@ -127,10 +154,38 @@ class DesktopPet(QWidget):
         painter.end()
         return new_pixmap
 
-    def reset_anger(self):
-        """重置红温值。"""
+    def trigger_bark(self):
+        """倒计时结束，进入 Bark 状态"""
+        if self.anger_level == 0:
+            self.end_bark()
+            return
+            
+        self.state = PetState.BARK
+        self.ai_timer.stop() # 暂停普通的思考
+        self.vx, self.vy = 0, 0
+        
+        # 记录基准位置用于抖动计算
+        self.bark_base_x = self.pos_x
+        self.bark_base_y = self.pos_y
+        
+        # 根据分值计算 Bark 的持续时间: 基础 1 秒 + 每 10 分增加 0.2 秒
+        bark_duration = 1000 + int(self.anger_level * 20)
+        self.bark_timer.start(bark_duration)
+        self.update_image()
+
+    def end_bark(self):
+        """Bark 结束，重置状态"""
         self.anger_level = 0
         self._update_tinted_pixmaps()
+        
+        # 恢复物理位置
+        if self.state == PetState.BARK:
+            self.pos_x = self.bark_base_x
+            self.pos_y = self.bark_base_y
+            self.move(int(self.pos_x), int(self.pos_y))
+            
+        self.set_state(PetState.IDLE)
+        self.think() # 重新启动普通 AI
 
     def increase_anger(self):
         """每次点击增加红温值，只有在红温为0时才启动10秒倒计时，不再刷新。"""
@@ -143,10 +198,13 @@ class DesktopPet(QWidget):
     def update_image(self):
         """根据当前方向和摇摆角度更新图片。"""
         # 注意: 如果还在 load_image 初始化过程中，tinted_left 可能还不存在
-        if not hasattr(self, 'tinted_left'):
+        if not hasattr(self, 'tinted_left') or not hasattr(self, 'tinted_bark_left'):
             return
             
-        base_pixmap = self.tinted_left if self.is_mirrored else self.tinted_right
+        if self.state == PetState.BARK:
+            base_pixmap = self.tinted_bark_left if self.is_mirrored else self.tinted_bark_right
+        else:
+            base_pixmap = self.tinted_left if self.is_mirrored else self.tinted_right
         
         if self.wobble_angle != 0.0:
             # 应用旋转来模拟摇摆
@@ -209,7 +267,25 @@ class DesktopPet(QWidget):
 
     def update_physics(self):
         """更新位置并处理碰撞。"""
-        if self.is_dragging or self.state == PetState.IDLE:
+        if self.is_dragging:
+            return
+            
+        if self.state == PetState.BARK:
+            # 根据红温分值决定抖动烈度
+            anger_factor = 1.0 + (self.anger_level / 100.0)
+            shake_pos = 3.0 * anger_factor # 位置抖动半径
+            shake_angle = 10.0 * anger_factor # 旋转抖动最大角度
+            
+            # 在基准位置上随机跳跃 (狂震)
+            self.pos_x = self.bark_base_x + random.uniform(-shake_pos, shake_pos)
+            self.pos_y = self.bark_base_y + random.uniform(-shake_pos, shake_pos)
+            self.wobble_angle = random.uniform(-shake_angle, shake_angle)
+            
+            self.update_image()
+            self.move(int(self.pos_x), int(self.pos_y))
+            return
+            
+        if self.state == PetState.IDLE:
             return
             
         self.pos_x += self.vx
@@ -263,6 +339,9 @@ class DesktopPet(QWidget):
     # --- 鼠标事件 (交互) ---
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            if self.state == PetState.BARK:
+                return # 处于爆发状态时无视点击
+                
             self.increase_anger() # 累加红温
             
             self.is_dragging = True
