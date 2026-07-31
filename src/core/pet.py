@@ -33,6 +33,12 @@ class DesktopPet(QWidget):
         self.wobble_angle = 0.0
         self.wobble_time = 0.0
 
+        # 红温系统相关
+        self.anger_level = 0
+        self.anger_timer = QTimer(self)
+        self.anger_timer.timeout.connect(self.reset_anger)
+        self.anger_timer.setSingleShot(True)
+
         # --- 图形 / 动画 ---
         self.label = QLabel(self)
         self.label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
@@ -83,7 +89,7 @@ class DesktopPet(QWidget):
             self.pixmap_right = self._create_fallback_pixmap(Qt.GlobalColor.green)
             self.pixmap_left = self._create_fallback_pixmap(Qt.GlobalColor.blue)
             
-        self.update_image()
+        self._update_tinted_pixmaps()
         self.set_state(PetState.IDLE)
 
     def _create_fallback_pixmap(self, color):
@@ -95,9 +101,46 @@ class DesktopPet(QWidget):
         painter.end()
         return pixmap
 
+    def _update_tinted_pixmaps(self):
+        """根据当前红温值生成染色后的贴图。"""
+        if self.anger_level == 0:
+            self.tinted_right = self.pixmap_right
+            self.tinted_left = self.pixmap_left
+        else:
+            self.tinted_right = self._apply_red_tint(self.pixmap_right)
+            self.tinted_left = self._apply_red_tint(self.pixmap_left)
+        self.update_image()
+
+    def _apply_red_tint(self, pixmap):
+        new_pixmap = QPixmap(pixmap.size())
+        new_pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(new_pixmap)
+        painter.drawPixmap(0, 0, pixmap)
+        painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
+        # 根据红温值 (0-100) 计算透明度，最高 180 (保留一定原图细节)
+        alpha = int((self.anger_level / 100.0) * 180)
+        painter.fillRect(new_pixmap.rect(), QColor(255, 0, 0, alpha))
+        painter.end()
+        return new_pixmap
+
+    def reset_anger(self):
+        """重置红温值。"""
+        self.anger_level = 0
+        self._update_tinted_pixmaps()
+
+    def increase_anger(self):
+        """每次点击增加红温值，并重置10秒冷却。"""
+        self.anger_level = min(100, self.anger_level + 20) # 每次增加20，最大100
+        self.anger_timer.start(10000) # 10秒后重置
+        self._update_tinted_pixmaps()
+
     def update_image(self):
         """根据当前方向和摇摆角度更新图片。"""
-        base_pixmap = self.pixmap_left if self.is_mirrored else self.pixmap_right
+        # 注意: 如果还在 load_image 初始化过程中，tinted_left 可能还不存在
+        if not hasattr(self, 'tinted_left'):
+            return
+            
+        base_pixmap = self.tinted_left if self.is_mirrored else self.tinted_right
         
         if self.wobble_angle != 0.0:
             # 应用旋转来模拟摇摆
@@ -194,6 +237,8 @@ class DesktopPet(QWidget):
     # --- 鼠标事件 (交互) ---
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
+            self.increase_anger() # 累加红温
+            
             self.is_dragging = True
             self.drag_offset = event.globalPosition() - self.pos()
             
