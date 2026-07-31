@@ -45,6 +45,8 @@ class DesktopPet(QWidget):
         self.bark_timer.setSingleShot(True)
         self.bark_base_x = 0.0
         self.bark_base_y = 0.0
+        self.bark_start_anger = 0
+        self.bark_total_duration = 0
 
         # --- 图形 / 动画 ---
         self.label = QLabel(self)
@@ -168,9 +170,11 @@ class DesktopPet(QWidget):
         self.bark_base_x = self.pos_x
         self.bark_base_y = self.pos_y
         
-        # 根据分值计算 Bark 的持续时间: 基础 1 秒 + 每 10 分增加 0.2 秒
-        bark_duration = 1000 + int(self.anger_level * 20)
-        self.bark_timer.start(bark_duration)
+        # 记录初始红温值和总持续时间，用于衰减计算
+        self.bark_start_anger = self.anger_level
+        self.bark_total_duration = 1000 + int(self.anger_level * 20)
+        
+        self.bark_timer.start(self.bark_total_duration)
         self.update_image()
 
     def end_bark(self):
@@ -271,7 +275,16 @@ class DesktopPet(QWidget):
             return
             
         if self.state == PetState.BARK:
-            # 根据红温分值决定抖动烈度
+            # 计算剩余时间比例 (0.0 到 1.0)
+            remaining_time = self.bark_timer.remainingTime()
+            if remaining_time < 0: remaining_time = 0
+            progress_ratio = remaining_time / float(self.bark_total_duration) if self.bark_total_duration > 0 else 0
+            
+            # 随时间逐渐消退红温值
+            self.anger_level = int(self.bark_start_anger * progress_ratio)
+            self._update_tinted_pixmaps() # 动态更新图片颜色
+            
+            # 根据当前的剩余红温分值决定抖动烈度 (同样会随时间减弱)
             anger_factor = 1.0 + (self.anger_level / 100.0)
             shake_pos = 3.0 * anger_factor # 位置抖动半径
             shake_angle = 10.0 * anger_factor # 旋转抖动最大角度
