@@ -170,15 +170,27 @@ class DesktopPet(QWidget):
         if self.is_dragging:
             return # 被拖拽时不思考
             
+        # 根据红温计算疯狂系数 (Anger Factor)
+        # 0红温 = 1.0 (正常)
+        # 100红温 = 2.0 (2倍速，2倍疯狂)
+        # 200红温 = 3.0 等等...
+        anger_factor = 1.0 + (self.anger_level / 100.0)
+            
         # 随机选择发呆或行走
-        if random.random() < 0.5:
+        # 红温越高，发呆的概率越低 (正常50%，100红温25%，200红温16.6%)
+        idle_probability = 0.5 / anger_factor
+        
+        if random.random() < idle_probability:
             self.set_state(PetState.IDLE)
             self.vx, self.vy = 0, 0
         else:
             self.set_state(PetState.WALKING)
             # 选取一个随机角度 (0 到 360 度)
             angle = random.uniform(0, 2 * math.pi)
-            speed = random.uniform(BASE_SPEED_MIN, BASE_SPEED_MAX)
+            
+            # 速度随着红温增加
+            speed = random.uniform(BASE_SPEED_MIN, BASE_SPEED_MAX) * anger_factor
+            
             self.vx = math.cos(angle) * speed
             self.vy = math.sin(angle) * speed
             
@@ -188,8 +200,11 @@ class DesktopPet(QWidget):
             if old_mirrored != self.is_mirrored:
                 self.update_image()
             
-        # 安排下一次思考
-        next_interval = random.randint(AI_MIN_INTERVAL, AI_MAX_INTERVAL)
+        # 安排下一次思考 (红温越高，思考间隔越短 -> 变向越频繁，越混沌)
+        min_interval = int(AI_MIN_INTERVAL / anger_factor)
+        max_interval = int(AI_MAX_INTERVAL / anger_factor)
+        # 限制最小思考时间为 100ms，防止过快导致程序卡死
+        next_interval = random.randint(max(100, min_interval), max(100, max_interval))
         self.ai_timer.start(next_interval)
 
     def update_physics(self):
@@ -200,9 +215,14 @@ class DesktopPet(QWidget):
         self.pos_x += self.vx
         self.pos_y += self.vy
         
+        # 动态计算疯狂系数
+        anger_factor = 1.0 + (self.anger_level / 100.0)
+        
         # 计算摇摆角度 (正弦波)
-        self.wobble_time += 0.15 # 调整这个值来改变摇摆速度
-        max_wobble = 15.0 # 最大摇摆角度
+        # 摇摆速度和最大摇摆角度都随着红温增加
+        self.wobble_time += 0.15 * anger_factor
+        max_wobble = 15.0 * min(3.0, anger_factor) # 限制最大摇摆角度不超过 45 度
+        
         self.wobble_angle = math.sin(self.wobble_time) * max_wobble
         
         # 每次物理更新时刷新图像以应用旋转
