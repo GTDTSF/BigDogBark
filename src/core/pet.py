@@ -5,7 +5,7 @@ from PySide6.QtCore import Qt, QTimer, QPointF
 from PySide6.QtGui import QCursor, QAction, QMovie, QTransform, QPixmap, QPainter, QColor
 from PySide6.QtWidgets import QWidget, QLabel, QMenu, QApplication
 
-from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, FRAMES_DIR, PET_WIDTH, PET_HEIGHT
+from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, QUIT_IMG, PET_WIDTH, PET_HEIGHT
 
 class DesktopPet(QWidget):
     def __init__(self):
@@ -35,12 +35,13 @@ class DesktopPet(QWidget):
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         self.current_movie = None
-        self.load_movies()
         
         # 应用固定尺寸
         w, h = PET_WIDTH, PET_HEIGHT
         self.setFixedSize(w, h)
         self.label.setFixedSize(w, h)
+        
+        self.load_image()
         
         # 初始居中显示桌宠
         screen_rect = QApplication.primaryScreen().availableGeometry()
@@ -60,63 +61,45 @@ class DesktopPet(QWidget):
         self.ai_timer.setSingleShot(True)
         self.think() # 启动 AI 循环
 
-    def load_movies(self):
-        """将静态帧加载为动画序列。"""
-        self.frames = []
-        
-        if os.path.exists(FRAMES_DIR):
-            # 获取所有帧文件并排序
-            frame_files = sorted([f for f in os.listdir(FRAMES_DIR) if f.startswith('frame_') and f.endswith('.png')])
-            for f in frame_files:
-                path = os.path.join(FRAMES_DIR, f)
-                pixmap = QPixmap(path)
-                # 预先缩放以提高性能
-                pixmap = pixmap.scaled(
-                    self.size(), 
-                    Qt.AspectRatioMode.KeepAspectRatio, 
-                    Qt.TransformationMode.SmoothTransformation
-                )
-                self.frames.append(pixmap)
+    def load_image(self):
+        """加载静态图片并缓存镜像。"""
+        if os.path.exists(QUIT_IMG):
+            pixmap = QPixmap(QUIT_IMG)
+            # 缩放至固定尺寸，保持纵横比
+            self.pixmap_right = pixmap.scaled(
+                self.size(), 
+                Qt.AspectRatioMode.KeepAspectRatio, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            # 预先生成向左（镜像）的图片
+            transform = QTransform().scale(-1, 1)
+            self.pixmap_left = self.pixmap_right.transformed(transform)
         else:
-            print(f"警告: 未在 {FRAMES_DIR} 找到素材")
+            print(f"警告: 未在 {QUIT_IMG} 找到素材")
+            self.pixmap_right = self._create_fallback_pixmap(Qt.GlobalColor.green)
+            self.pixmap_left = self._create_fallback_pixmap(Qt.GlobalColor.blue)
             
-        self.current_frame_index = 0
-        
-        # 动画帧定时器 (约 30 FPS)
-        self.anim_timer = QTimer(self)
-        self.anim_timer.timeout.connect(self.on_frame_changed)
-        self.anim_timer.start(33)
-        
+        self.update_image()
         self.set_state(PetState.IDLE)
 
-    def on_frame_changed(self):
-        """更新当前帧。"""
-        if not self.frames:
-            return
-            
-        self.current_frame_index = (self.current_frame_index + 1) % len(self.frames)
-        pixmap = self.frames[self.current_frame_index]
-        
-        # 如果向左移动，则水平镜像图像
+    def _create_fallback_pixmap(self, color):
+        pixmap = QPixmap(self.size())
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setBrush(QColor(color))
+        painter.drawEllipse(10, 10, self.width()-20, self.height()-20)
+        painter.end()
+        return pixmap
+
+    def update_image(self):
+        """根据当前方向更新图片。"""
         if self.is_mirrored:
-            transform = QTransform().scale(-1, 1)
-            pixmap = pixmap.transformed(transform)
-            
-        self.label.setPixmap(pixmap)
+            self.label.setPixmap(self.pixmap_left)
+        else:
+            self.label.setPixmap(self.pixmap_right)
 
     def set_state(self, new_state):
         self.state = new_state
-        
-        if not self.frames:
-            # 如果没有帧序列则使用后备方案画个圆
-            pixmap = QPixmap(self.size())
-            pixmap.fill(Qt.GlobalColor.transparent)
-            painter = QPainter(pixmap)
-            color = Qt.GlobalColor.green if self.state == PetState.IDLE else Qt.GlobalColor.blue
-            painter.setBrush(QColor(color))
-            painter.drawEllipse(10, 10, self.width()-20, self.height()-20)
-            painter.end()
-            self.label.setPixmap(pixmap)
 
     def think(self):
         """AI 逻辑：决定下一个状态和移动向量。"""
@@ -136,7 +119,10 @@ class DesktopPet(QWidget):
             self.vy = math.sin(angle) * speed
             
             # 根据水平速度更新镜像状态
+            old_mirrored = self.is_mirrored
             self.is_mirrored = self.vx < 0
+            if old_mirrored != self.is_mirrored:
+                self.update_image()
             
         # 安排下一次思考
         next_interval = random.randint(AI_MIN_INTERVAL, AI_MAX_INTERVAL)
@@ -174,7 +160,10 @@ class DesktopPet(QWidget):
             
         # 如果我们碰到左右墙壁，更新镜像方向
         if hit_edge:
+            old_mirrored = self.is_mirrored
             self.is_mirrored = self.vx < 0
+            if old_mirrored != self.is_mirrored:
+                self.update_image()
             
         # 应用新位置
         self.move(int(self.pos_x), int(self.pos_y))

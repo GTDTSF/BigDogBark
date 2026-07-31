@@ -10,7 +10,9 @@ class PetState(Enum):
 # 路径配置
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ASSETS_DIR = os.path.join(BASE_DIR, "assets")
-FRAMES_DIR = os.path.join(ASSETS_DIR, "bark_frames")
+USEFULL_DIR = os.path.join(ASSETS_DIR, "usefull")
+QUIT_IMG = os.path.join(USEFULL_DIR, "quit.png")
+BARK_IMG = os.path.join(USEFULL_DIR, "bark.png")
 
 # 物理与时间配置
 FPS = 60
