@@ -28,6 +28,10 @@ class DesktopPet(QWidget):
         self.is_mirrored = False # False = 朝右, True = 朝左
         self.is_dragging = False
         self.drag_offset = QPointF()
+        
+        # 摇摆动画相关
+        self.wobble_angle = 0.0
+        self.wobble_time = 0.0
 
         # --- 图形 / 动画 ---
         self.label = QLabel(self)
@@ -92,14 +96,25 @@ class DesktopPet(QWidget):
         return pixmap
 
     def update_image(self):
-        """根据当前方向更新图片。"""
-        if self.is_mirrored:
-            self.label.setPixmap(self.pixmap_left)
+        """根据当前方向和摇摆角度更新图片。"""
+        base_pixmap = self.pixmap_left if self.is_mirrored else self.pixmap_right
+        
+        if self.wobble_angle != 0.0:
+            # 应用旋转来模拟摇摆
+            transform = QTransform().rotate(self.wobble_angle)
+            rotated_pixmap = base_pixmap.transformed(
+                transform, 
+                Qt.TransformationMode.SmoothTransformation
+            )
+            self.label.setPixmap(rotated_pixmap)
         else:
-            self.label.setPixmap(self.pixmap_right)
+            self.label.setPixmap(base_pixmap)
 
     def set_state(self, new_state):
         self.state = new_state
+        if self.state == PetState.IDLE:
+            self.wobble_angle = 0.0
+            self.update_image()
 
     def think(self):
         """AI 逻辑：决定下一个状态和移动向量。"""
@@ -135,6 +150,14 @@ class DesktopPet(QWidget):
             
         self.pos_x += self.vx
         self.pos_y += self.vy
+        
+        # 计算摇摆角度 (正弦波)
+        self.wobble_time += 0.15 # 调整这个值来改变摇摆速度
+        max_wobble = 15.0 # 最大摇摆角度
+        self.wobble_angle = math.sin(self.wobble_time) * max_wobble
+        
+        # 每次物理更新时刷新图像以应用旋转
+        self.update_image()
         
         # 获取屏幕边界 (考虑任务栏)
         screen_rect = QApplication.primaryScreen().availableGeometry()
