@@ -261,8 +261,14 @@ class DesktopPet(QWidget):
     def _show_score_popup(self, score):
         self.is_showing_score = True
         
-        # 创建一个无边框的透明标签用来显示浮空文字
-        self.score_label = QLabel(f"恭喜获得 {score} 分\n分享给朋友，一起狗叫！", self)
+        # 弹出一个独立的无边框提示窗口
+        self.score_label = QLabel(f"恭喜获得 {score} 分\n分享给朋友，一起狗叫！")
+        self.score_label.setWindowFlags(
+            Qt.WindowType.FramelessWindowHint | 
+            Qt.WindowType.WindowStaysOnTopHint | 
+            Qt.WindowType.Tool
+        )
+        self.score_label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         # 设置字体和样式
@@ -271,7 +277,7 @@ class DesktopPet(QWidget):
         self.score_label.setStyleSheet("""
             QLabel {
                 color: #FF5555;
-                background-color: rgba(255, 255, 255, 200);
+                background-color: rgba(255, 255, 255, 240);
                 border-radius: 10px;
                 padding: 10px;
                 border: 2px solid #FF5555;
@@ -279,14 +285,15 @@ class DesktopPet(QWidget):
         """)
         self.score_label.adjustSize()
         
-        # 将文字定位在狗子的正上方
-        label_x = (self.width() - self.score_label.width()) / 2
-        label_y = -self.score_label.height() - 10
+        # 计算全局屏幕坐标，定位于狗子的正上方
+        global_pet_pos = self.geometry()
+        label_x = global_pet_pos.x() + (global_pet_pos.width() - self.score_label.width()) / 2
+        label_y = global_pet_pos.y() - self.score_label.height() - 10
         
-        # 如果上方超出屏幕，则放在狗子下方
-        global_y = self.y() + label_y
-        if global_y < 0:
-            label_y = self.height() + 10
+        # 防止弹到屏幕外
+        screen_rect = QApplication.primaryScreen().availableGeometry()
+        if label_y < screen_rect.top():
+            label_y = global_pet_pos.bottom() + 10
             
         self.score_label.move(int(label_x), int(label_y))
         self.score_label.show()
