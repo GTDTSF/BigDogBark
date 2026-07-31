@@ -260,28 +260,31 @@ class DesktopPet(QWidget):
         self.anger_level += 10 # 每次增加10，无上限
         self._update_tinted_pixmaps()
         
-        # 将播放任务加入队列
-        self.audio_queue_count += 1
-        
-        # 动态更新播放倍速
-        playback_rate = min(3.0, 1.0 + (self.anger_level / 100.0))
-        self.bark_player.setPlaybackRate(playback_rate)
-        
-        # 如果当前没有在播放，则立刻开始播放
-        if self.bark_player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
-            self._play_next_audio()
+        # 播放大狗叫声音频，并发不截断
+        if os.path.exists(DOG_MP4):
+            player = QMediaPlayer()
+            audio_output = QAudioOutput()
+            player.setAudioOutput(audio_output)
+            # 防止 audio_output 被垃圾回收导致没有声音
+            player.audio_output_ref = audio_output 
+            
+            player.setSource(QUrl.fromLocalFile(os.path.abspath(DOG_MP4)))
+            
+            # 恢复根据红温增加播放速度 (每次点击速度提升，最高加速到 3.0 倍)
+            playback_rate = min(3.0, 1.0 + (self.anger_level / 100.0))
+            player.setPlaybackRate(playback_rate)
+            
+            # 播放结束后清理资源
+            player.mediaStatusChanged.connect(lambda status, p=player: self._cleanup_player(p, status))
+            
+            self.media_players.append(player)
+            player.play()
 
-    def _play_next_audio(self):
-        if self.audio_queue_count > 0:
-            self.bark_player.setPosition(0) # 进度回滚到开头
-            self.bark_player.play()
-
-    def _on_bark_status_changed(self, status):
-        """当单个音频播放结束时，处理队列中的下一个"""
+    def _cleanup_player(self, player, status):
+        """清理已完成播放的临时播放器"""
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
-            self.audio_queue_count -= 1
-            if self.audio_queue_count > 0:
-                self._play_next_audio()
+            if player in self.media_players:
+                self.media_players.remove(player)
 
     def update_image(self):
         """根据当前方向和摇摆角度更新图片。"""
