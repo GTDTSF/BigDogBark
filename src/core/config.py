@@ -14,6 +14,7 @@ ASSETS_DIR = os.path.join(BASE_DIR, "assets")
 USEFULL_DIR = os.path.join(ASSETS_DIR, "usefull")
 QUIT_IMG = os.path.join(USEFULL_DIR, "quit.png")
 BARK_IMG = os.path.join(USEFULL_DIR, "bark.png")
+DOG_MP4 = os.path.join(BASE_DIR, "dog_audio.mp3")
 
 # 物理与时间配置
 FPS = 60

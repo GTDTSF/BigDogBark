@@ -1,11 +1,12 @@
 import math
 import random
 import os
-from PySide6.QtCore import Qt, QTimer, QPointF
+from PySide6.QtCore import Qt, QTimer, QPointF, QUrl
 from PySide6.QtGui import QCursor, QAction, QMovie, QTransform, QPixmap, QPainter, QColor
 from PySide6.QtWidgets import QWidget, QLabel, QMenu, QApplication
+from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, QUIT_IMG, BARK_IMG, PET_WIDTH, PET_HEIGHT
+from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, QUIT_IMG, BARK_IMG, DOG_MP4, PET_WIDTH, PET_HEIGHT
 
 class DesktopPet(QWidget):
     def __init__(self):
@@ -47,6 +48,9 @@ class DesktopPet(QWidget):
         self.bark_base_y = 0.0
         self.bark_start_anger = 0
         self.bark_total_duration = 0
+        
+        # 媒体播放器列表 (防止被垃圾回收)，用于支持不覆盖的并发播放
+        self.media_players = []
 
         # --- 图形 / 动画 ---
         self.label = QLabel(self)
@@ -198,6 +202,28 @@ class DesktopPet(QWidget):
             
         self.anger_level += 10 # 每次增加10，无上限
         self._update_tinted_pixmaps()
+        
+        # 播放大狗叫声音频
+        if os.path.exists(DOG_MP4):
+            # 根据红温增加播放速度 (每次点击速度提升，最高加速到 3.0 倍)
+            playback_rate = min(3.0, 1.0 + (self.anger_level / 100.0))
+            
+            player = QMediaPlayer()
+            audio_output = QAudioOutput()
+            player.setAudioOutput(audio_output)
+            player.setSource(QUrl.fromLocalFile(os.path.abspath(DOG_MP4)))
+            player.setPlaybackRate(playback_rate)
+            
+            # 播放结束后清理资源
+            player.mediaStatusChanged.connect(lambda status, p=player: self._cleanup_player(p, status))
+            
+            self.media_players.append(player)
+            player.play()
+
+    def _cleanup_player(self, player, status):
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
+            if player in self.media_players:
+                self.media_players.remove(player)
 
     def update_image(self):
         """根据当前方向和摇摆角度更新图片。"""
