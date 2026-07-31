@@ -117,8 +117,12 @@ class DesktopPet(QWidget):
         painter = QPainter(new_pixmap)
         painter.drawPixmap(0, 0, pixmap)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceAtop)
-        # 根据红温值 (0-100) 计算透明度，最高 180 (保留一定原图细节)
-        alpha = int((self.anger_level / 100.0) * 180)
+        
+        # 根据红温值计算透明度，限制显示效果最高 180 (保留一定原图细节)
+        # 即使红温值无限大，画面的红度也锁定在最大 180 的透明度
+        display_anger = min(100, self.anger_level) 
+        alpha = int((display_anger / 100.0) * 180)
+        
         painter.fillRect(new_pixmap.rect(), QColor(255, 0, 0, alpha))
         painter.end()
         return new_pixmap
@@ -130,7 +134,7 @@ class DesktopPet(QWidget):
 
     def increase_anger(self):
         """每次点击增加红温值，并重置10秒冷却。"""
-        self.anger_level = min(100, self.anger_level + 10) # 每次增加10，最大100
+        self.anger_level += 10 # 每次增加10，无上限
         self.anger_timer.start(10000) # 10秒后重置
         self._update_tinted_pixmaps()
 
