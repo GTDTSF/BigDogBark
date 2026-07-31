@@ -23,12 +23,13 @@ uv add nuitka
 请在项目根目录（`main.py` 所在目录）运行以下打包命令：
 
 ```bash
-uv run nuitka --standalone --mingw64 --output-dir=dist --remove-output --no-prefer-source-code --show-scons --windows-console-mode=disable --enable-plugin=pyside6 --enable-plugin=anti-bloat --lto=yes --python-flag=no_docstrings --python-flag=no_asserts --include-data-dir=assets=assets --include-data-files="大狗.mp3=大狗.mp3" --include-data-files="叫.mp3=叫.mp3" --include-qt-plugins=multimedia main.py
+uv run nuitka --standalone --mingw64 --output-dir=dist --remove-output --no-prefer-source-code --show-scons --windows-console-mode=disable --enable-plugin=pyside6 --enable-plugin=anti-bloat --lto=yes --python-flag=no_docstrings --python-flag=no_asserts --include-data-dir=assets=assets --include-data-files="大狗.mp3=大狗.mp3" --include-data-files="叫.mp3=叫.mp3" --include-qt-plugins=multimedia --windows-icon-from-ico=assets/usefull/icon.ico main.py
 ```
 
 ### 核心参数解析 (针对本项目定制)
 * `--output-dir=dist`：输出文件夹将生成在 `dist` 目录下。
 * `--windows-console-mode=disable`：隐藏黑色控制台窗口，让桌宠变成纯粹的 GUI 应用。
+* `--windows-icon-from-ico=assets/usefull/icon.ico`：将生成的应用程序 (.exe) 文件的系统图标设置为刚刚生成的这只狗的图标！
 * `--enable-plugin=pyside6`：*必须开启*，Nuitka 专门针对 Qt 框架的打包支持，处理内部依赖和 Qt 插件。
 * `--include-qt-plugins=multimedia`：*非常重要*，强制打包 Qt 的多媒体音频插件库，否则最终的 exe 将无法发出声音。
 * `--include-data-dir=assets=assets`：这会将包含贴图的 `assets` 素材文件夹一并完整拷贝到最终的打包目录中。
