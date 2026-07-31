@@ -6,7 +6,7 @@ from PySide6.QtGui import QCursor, QAction, QMovie, QTransform, QPixmap, QPainte
 from PySide6.QtWidgets import QWidget, QLabel, QMenu, QApplication
 from PySide6.QtMultimedia import QMediaPlayer, QAudioOutput
 
-from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, QUIT_IMG, BARK_IMG, DOG_MP4, PET_WIDTH, PET_HEIGHT
+from src.core.config import PetState, TICK_RATE, AI_MIN_INTERVAL, AI_MAX_INTERVAL, BASE_SPEED_MIN, BASE_SPEED_MAX, QUIT_IMG, BARK_IMG, DOG_MP4, HOWL_MP3, PET_WIDTH, PET_HEIGHT
 
 class DesktopPet(QWidget):
     def __init__(self):
@@ -61,6 +61,17 @@ class DesktopPet(QWidget):
         if os.path.exists(DOG_MP4):
             self.bark_player.setSource(QUrl.fromLocalFile(os.path.abspath(DOG_MP4)))
         self.bark_player.mediaStatusChanged.connect(self._on_bark_status_changed)
+
+        # 爆发大叫专用播放器
+        self.howl_player = QMediaPlayer()
+        self.howl_audio = QAudioOutput()
+        self.howl_player.setAudioOutput(self.howl_audio)
+        self.howl_player.audio_output_ref = self.howl_audio
+        if os.path.exists(HOWL_MP3):
+            self.howl_player.setSource(QUrl.fromLocalFile(os.path.abspath(HOWL_MP3)))
+        
+        self.howl_rate_changed = False
+        self.howl_player.positionChanged.connect(self._on_howl_pos_changed)
 
         # --- 图形 / 动画 ---
         self.label = QLabel(self)
@@ -170,6 +181,31 @@ class DesktopPet(QWidget):
         painter.end()
         return new_pixmap
 
+    def _on_howl_pos_changed(self, pos):
+        """控制大叫声音的拉长，前段正常，后段拉长填满爆发时间"""
+        if self.state != PetState.BARK or self.howl_rate_changed:
+            return
+            
+        duration = self.howl_player.duration()
+        if duration <= 0: return
+        
+        # 音频前 30% 保持正常速度，越过这个点开始放慢
+        threshold = duration * 0.3
+        
+        if pos >= threshold:
+            self.howl_rate_changed = True
+            remaining_audio_time = float(duration - pos)
+            
+            # 计算爆发剩余时间
+            remaining_bark_time = float(self.bark_timer.remainingTime())
+            
+            if remaining_bark_time > 0 and remaining_audio_time > 0:
+                # 动态计算速度，让剩余音频刚好在爆发结束时播完
+                rate = remaining_audio_time / remaining_bark_time
+                # 限制一个最低速度，防止卡音太严重
+                rate = max(0.05, min(1.0, rate))
+                self.howl_player.setPlaybackRate(rate)
+
     def trigger_bark(self):
         """倒计时结束，进入 Bark 状态"""
         if self.anger_level == 0:
@@ -190,12 +226,23 @@ class DesktopPet(QWidget):
         
         self.bark_timer.start(self.bark_total_duration)
         self.update_image()
+        
+        # 播放大叫音频
+        if os.path.exists(HOWL_MP3):
+            self.howl_rate_changed = False
+            self.howl_player.setPlaybackRate(1.0)
+            self.howl_player.setPosition(0)
+            self.howl_player.play()
 
     def end_bark(self):
         """Bark 结束，重置状态"""
         self.anger_level = 0
         self._update_tinted_pixmaps()
         
+        # 停止大叫音频
+        if self.howl_player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
+            self.howl_player.stop()
+            
         # 恢复物理位置
         if self.state == PetState.BARK:
             self.pos_x = self.bark_base_x
