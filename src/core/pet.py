@@ -211,6 +211,9 @@ class DesktopPet(QWidget):
             player = QMediaPlayer()
             audio_output = QAudioOutput()
             player.setAudioOutput(audio_output)
+            # 防止 audio_output 被垃圾回收导致没有声音
+            player.audio_output_ref = audio_output 
+            
             player.setSource(QUrl.fromLocalFile(os.path.abspath(DOG_MP4)))
             player.setPlaybackRate(playback_rate)
             
