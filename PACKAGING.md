@@ -9,7 +9,7 @@
 ```bash
 uv add nuitka
 ```
-*(注：首次运行 Nuitka 时，它可能会提示自动下载 MinGW-w64 (GCC 编译器) 和 Ccache，请根据提示输入 `Yes` 允许下载。)*
+*(注：首次运行 Nuitka 时，它可能会提示自动下载 MinGW-w64 (GCC 编译器) 和 Ccache，请根据提示输入 `Yes` 允许下载)*
 
 ### 1.2 下载 Enigma Virtual Box
 前往官方页面下载并安装 Enigma Virtual Box（完全免费）：
@@ -19,21 +19,22 @@ uv add nuitka
 
 ## 2. 第一阶段：使用 Nuitka 编译独立目录 (Standalone)
 
-首先，我们需要用 Nuitka 将 Python 脚本编译为机器码，并收sheji1集所有必要的 DLL 和依赖放入一个独立的文件夹中。
-
+首先，我们需要用 Nuitka 将 Python 脚本编译为机器码，并收集所有必要的 DLL 和依赖放入一个独立的文件夹中。
 请在项目根目录（`main.py` 所在目录）运行以下打包命令：
 
 ```bash
-uv run nuitka --standalone --mingw64 --output-dir=dist --remove-output --no-prefer-source-code --show-scons --windows-console-mode=disable --enable-plugin=pyside6 --enable-plugin=anti-bloat --lto=yes --python-flag=no_docstrings --python-flag=no_asserts --include-data-dir=assets=assets main.py
+uv run nuitka --standalone --mingw64 --output-dir=dist --remove-output --no-prefer-source-code --show-scons --windows-console-mode=disable --enable-plugin=pyside6 --enable-plugin=anti-bloat --lto=yes --python-flag=no_docstrings --python-flag=no_asserts --include-data-dir=assets=assets --include-data-files="大狗.mp3=大狗.mp3" --include-data-files="叫.mp3=叫.mp3" --include-qt-plugins=multimedia main.py
 ```
 
 ### 核心参数解析 (针对本项目定制)
 * `--output-dir=dist`：输出文件夹将生成在 `dist` 目录下。
 * `--windows-console-mode=disable`：隐藏黑色控制台窗口，让桌宠变成纯粹的 GUI 应用。
-* `--enable-plugin=pyside6`：**必须开启**，Nuitka 专门针对 Qt 框架的打包支持，处理内部依赖和 Qt 插件。
-* `--include-data-dir=assets=assets`：**非常重要**，这会将包含 `idle.gif` 和 `walk.gif` 的 `assets` 素材文件夹一并完整拷贝到最终的打包目录中。
+* `--enable-plugin=pyside6`：*必须开启*，Nuitka 专门针对 Qt 框架的打包支持，处理内部依赖和 Qt 插件。
+* `--include-qt-plugins=multimedia`：*非常重要*，强制打包 Qt 的多媒体音频插件库，否则最终的 exe 将无法发出声音。
+* `--include-data-dir=assets=assets`：这会将包含贴图的 `assets` 素材文件夹一并完整拷贝到最终的打包目录中。
+* `--include-data-files="大狗.mp3=大狗.mp3" ...`：将项目根目录的音频文件独立提取到编译目录。
 
-编译过程大概需要几分钟。完成后，您会得到一个 `dist/main.dist/` 文件夹。双击里面的 `main.exe`，如果桌宠正常出现且有动画，说明第一步大功告成！
+编译过程大概需要几分钟。完成后，您会得到一个 `dist/main.dist/` 文件夹。双击里面的 `main.exe`，如果桌宠正常出现且狂点有声音，说明第一步大功告成！
 
 ---
 
@@ -49,10 +50,10 @@ uv run nuitka --standalone --mingw64 --output-dir=dist --remove-output --no-pref
    * 在左下角，点击 `Add -> Add Folder Recursive`（递归添加文件夹）。
    * 选中你的 `dist/main.dist/` 文件夹（包含素材和所有 dll 的那个目录）。
    * 弹出提示要求选择目标位置时，**保留默认的 `%DEFAULT FOLDER%`** 即可，点击 OK。
-   * *(注意：如果您在这里看到了原本的 main.exe，这是正常的，无需剔除。)*
+   * *(注意：如果您在这里看到了原本的 main.exe，这是正常的，无需剔除)*
 5. **打包设置优化 (Files Options 选项卡)**：
    * 勾选 `Compress Files`（压缩文件），这能大幅减小最终单文件的大小。
 6. **开始打包**：点击右下角的 **`Process`** (或 `打包`) 按钮。
 
 等待进度条跑完后，你就会在输出路径得到一个终极版的 `BigDogBark.exe`。
-**这个单文件程序现在可以拷贝到任何 Windows 电脑上直接运行，自带绿幕狗狗和所有的 Python 运行库！**
+**这个单文件程序现在可以拷贝到任何 Windows 电脑上直接运行，自带动画、交互和所有音频环境库！**
