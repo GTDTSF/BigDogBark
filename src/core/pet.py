@@ -130,7 +130,7 @@ class DesktopPet(QWidget):
 
     def increase_anger(self):
         """每次点击增加红温值，并重置10秒冷却。"""
-        self.anger_level = min(100, self.anger_level + 20) # 每次增加20，最大100
+        self.anger_level = min(100, self.anger_level + 10) # 每次增加10，最大100
         self.anger_timer.start(10000) # 10秒后重置
         self._update_tinted_pixmaps()
 
